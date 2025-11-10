@@ -1,0 +1,1 @@
+`model.safetensors` is a generated file that is too big for git. Therefor it can be retrieved from shared google drive. 
