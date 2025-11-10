@@ -60,7 +60,9 @@ END;
 -- WHERE messages_fts MATCH 'meeting OR tonight'
 -- AND conv_id = 'dm:u_ran->u_dana'
 -- LIMIT 50;
-/*INSERT INTO messages (msg_id, sender_user_id, receiver_user_id, sent_at, text)
+
+/*
+INSERT INTO messages (msg_id, sender_user_id, receiver_user_id, sent_at, text)
 VALUES
   ('m1', 'u_ran',  'u_dana', '2025-11-04T10:00:00Z', 'מגיע בשבע?'),
   ('m2', 'u_dana', 'u_ran',  '2025-11-04T10:01:05Z', 'כן, מתאים לי');
@@ -69,4 +71,5 @@ VALUES
 FROM messages
 WHERE conv_id = 'dm:u_ran->u_dana'
 ORDER BY sent_at DESC
-LIMIT 20;*/
+LIMIT 20;
+*/
