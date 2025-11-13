@@ -187,7 +187,7 @@ def generate_responses(model, tokenizer, items, device, max_new_tokens=48, top_p
     gens = []
 
      # ✅ open the file ONCE, in append mode (or write mode if you want overwrite)
-    f = open("gens_cache.jsonl", "w", encoding="utf-8")
+    f = open("gens_fine_tune.jsonl", "w", encoding="utf-8")
 
     for batch in tqdm(list(batchify(items, batch_size)), desc="Generate"):
         prompts = [x["prompt"] for x in batch]
@@ -249,6 +249,10 @@ def main():
     # Load model and tokenizer
     print(f"Loading model from {args.model_dir}")
     torch_dtype = torch.float16 if device.type == "cuda" else torch.float32
+
+    #orig_model = "TinyLlama/TinyLlama-1.1B-Chat-v1.0" 
+    # args.model_dir
+
     tokenizer = AutoTokenizer.from_pretrained(args.model_dir, use_fast=True)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
@@ -289,7 +293,7 @@ def main():
     # print(f"\nPerplexity (target-only): {ppl:.3f}")
 
     # 2) Generate responses then centroid affinity
-    if os.path.exists("gens_cache_cleaned.jsonl"):
+    if os.path.exists("gens_fine_tune_clean.jsonl"):
         print("Loading cached generations...")
         gens = []
         with open("gens_cache_cleaned.jsonl", "r", encoding="utf-8") as f:
