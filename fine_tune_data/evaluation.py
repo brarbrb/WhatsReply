@@ -49,52 +49,7 @@ def batchify(lst, bs):
 
 
 # -----------------------------
-# 1) Perplexity on target only
-# -----------------------------
-def compute_perplexity(model, tokenizer, items, device, batch_size):
-    model.eval()
-    total_loss = 0.0
-    total_toks = 0
-
-    for batch in tqdm(list(batchify(items, batch_size)), desc="Perplexity"):
-        prompts = [x["prompt"] for x in batch]
-        targets = [x["target"] for x in batch]
-
-        # 1. Tokenize Prompts (to find lengths)
-        enc_prompt = tokenizer(prompts, return_tensors="pt", padding="longest", truncation=True)
-        # prompt_lens is the true length of each prompt sequence *before* padding
-        prompt_lens = enc_prompt.attention_mask.sum(dim=1).cpu().numpy()
-
-        # 2. Tokenize Full Text (the input and labels)
-        full_texts = [p + " " + t for p, t in zip(prompts, targets)]
-        enc_full = tokenizer(full_texts, return_tensors="pt", padding="longest", truncation=True)
-
-        input_ids = enc_full["input_ids"].to(device)
-        attention_mask = enc_full["attention_mask"].to(device)
-        labels = input_ids.clone()
-        
-        # 3. Vectorized Masking: Set prompt indices to -100
-        for i, p_len in enumerate(prompt_lens):
-            # Mask the first p_len tokens (the prompt) for the i-th sample
-            labels[i, :p_len] = -100
-        
-        # 4. Forward Pass and Accumulation (Same as before)
-        with torch.no_grad():
-            outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
-
-        # Accumulate total loss and contributing tokens
-        batch_loss = outputs.loss.item()
-        contrib_tokens = (labels != -100).sum().item()
-        
-        total_loss += batch_loss * contrib_tokens
-        total_toks += contrib_tokens
-
-    ppl = math.exp(total_loss / max(total_toks, 1))
-    return ppl
-
-
-# -----------------------------
-# 2) Embedding centroid affinity
+# 1) Embedding centroid affinity
 # -----------------------------
 def centroid_affinity(real_lines: Dict[str, List[str]], gen_lines: Dict[str, List[str]], emb_model_name="all-mpnet-base-v2"):
     st = SentenceTransformer(emb_model_name)
@@ -121,7 +76,7 @@ def centroid_affinity(real_lines: Dict[str, List[str]], gen_lines: Dict[str, Lis
 
 
 # -----------------------------
-# 3) Stylometric JSD
+# 2) Stylometric JSD
 # -----------------------------
 _feat_regex = {
     "first_person": re.compile(r"\b(I|me|my|mine)\b", re.I),
@@ -246,34 +201,6 @@ def main():
     if device.type == "cuda":
         torch.cuda.manual_seed_all(42)
 
-    # Load model and tokenizer
-    print(f"Loading model from {args.model_dir}")
-    torch_dtype = torch.float16 if device.type == "cuda" else torch.float32
-
-    orig_model = "TinyLlama/TinyLlama-1.1B-Chat-v1.0" 
-    # args.model_dir
-
-    tokenizer = AutoTokenizer.from_pretrained(orig_model, use_fast=True)
-    if tokenizer.pad_token is None:
-        tokenizer.pad_token = tokenizer.eos_token
-
-
-    tokenizer.padding_side = "left"
-    if tokenizer.pad_token is None and tokenizer.eos_token is not None:
-        tokenizer.pad_token = tokenizer.eos_token
-    
-    #------- start new code --------
-    # also update the model config so generate() uses the correct pad token
-    # (important for decoder-only LLMs)
-    model = AutoModelForCausalLM.from_pretrained(orig_model, torch_dtype=torch_dtype)
-    model.config.pad_token_id = tokenizer.pad_token_id
-    #------ end new code -----------
-
-    # model = AutoModelForCausalLM.from_pretrained(args.model_dir, torch_dtype=torch_dtype)
-    
-    model.to(device)
-    model.eval()
-
     # Load test items
     test_path = '/Users/ransela/Desktop/data_science_degree/4th_year/spring/Data Analysis and Visualization Lab/project/Whatsapp_webApp_-Django-/fine_tune_data/bbt_test_cleaned.jsonl'
     raw = read_jsonl(test_path, max_samples=args.max_samples)
@@ -288,57 +215,84 @@ def main():
             "scene": r.get("scene") or r.get("scene_idx")
         })
 
-    # 1) Perplexity
-    # ppl = compute_perplexity(model, tokenizer, items, device, batch_size=args.batch_size)
-    # print(f"\nPerplexity (target-only): {ppl:.3f}")
+    summary_rows = []
 
-    # 2) Generate responses then centroid affinity
-    if os.path.exists("gens_orig_llama.jsonl"):
-        print("Loading cached generations...")
-        gens = []
-        with open("gens_cache_cleaned.jsonl", "r", encoding="utf-8") as f:
-            for line in f:
-                gens.append(json.loads(line))
-    else:
-        print("Generating responses (first time)...")
-        gens = generate_responses(model, tokenizer, items, device,
-                              max_new_tokens=args.max_new_tokens,
-                              batch_size=args.batch_size, max_length=args.max_length)
+    # Load model and tokenizer
+    for model in ["original","Fine_tune"]:
+        if model == "original":
+            args.model_dir = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+            path_to_gen = "gens_orig_llama.jsonl"
+        else:
+            args.model_dir = "/Users/ransela/merged"
+            path_to_gen = "gens_fine_tune.jsonl"  
 
-    # Build corpora per character
-    real_lines = defaultdict(list)
-    gen_lines = defaultdict(list)
-    for g in gens:
-        spk = g["target_speaker"]
-        real_lines[spk].append(g["gold"])
-        gen_lines[spk].append(g["gen"] if g["gen"] else "")
+        print(f"Loading model from {args.model_dir}")
+        torch_dtype = torch.float16 if device.type == "cuda" else torch.float32
 
-    acc, per_char_cos, confusion, df_aff = centroid_affinity(real_lines, gen_lines, emb_model_name=args.emb_model)
-    print(f"\nCentroid affinity accuracy: {acc*100:.2f}%")
-    if len(per_char_cos) > 0:
-        print("\nMean cosine to true centroid per character:")
-        print(per_char_cos.round(3))
-    if not confusion.empty:
-        print("\nConfusion matrix (row normalized):")
-        print(confusion.round(2))
 
-    # 3) Stylometric JSD
-    jsd_overall, df_jsd = stylometric_jsd(real_lines, gen_lines)
-    print(f"\nStylometric JSD (lower is better). Overall: {jsd_overall:.3f}")
-    print(df_jsd.round(3))
+        tokenizer = AutoTokenizer.from_pretrained(args.model_dir, use_fast=True)
+        if tokenizer.pad_token is None:
+            tokenizer.pad_token = tokenizer.eos_token
 
-    # Save outputs
-    out_gens = pd.DataFrame(gens)
-    out_gens.to_csv("generations_cleaned.csv", index=False)
-    summary_rows = [{
-        "perplexity": ppl,
-        "centroid_affinity_acc": acc,
-        "jsd_overall": jsd_overall
-    }]
+
+        tokenizer.padding_side = "left"
+        if tokenizer.pad_token is None and tokenizer.eos_token is not None:
+            tokenizer.pad_token = tokenizer.eos_token
+        
+
+        # also update the model config so generate() uses the correct pad token
+        # (important for decoder-only LLMs)
+        model = AutoModelForCausalLM.from_pretrained(args.model_dir, torch_dtype=torch_dtype)
+        model.config.pad_token_id = tokenizer.pad_token_id
+        
+        model.to(device)
+        model.eval()
+
+        # 1) Generate responses then centroid affinity
+        if os.path.exists(path_to_gen):
+            print("Loading cached generations...")
+            gens = []
+            with open(path_to_gen, "r", encoding="utf-8") as f:
+                for line in f:
+                    gens.append(json.loads(line))
+        else:
+            print("Generating responses (first time)...")
+            gens = generate_responses(model, tokenizer, items, device,
+                                max_new_tokens=args.max_new_tokens,
+                                batch_size=args.batch_size, max_length=args.max_length)
+
+        # Build corpora per character
+        real_lines = defaultdict(list)
+        gen_lines = defaultdict(list)
+        for g in gens:
+            spk = g["target_speaker"]
+            real_lines[spk].append(g["gold"])
+            gen_lines[spk].append(g["gen"] if g["gen"] else "")
+
+        acc, per_char_cos, confusion, df_aff = centroid_affinity(real_lines, gen_lines, emb_model_name=args.emb_model)
+        print(f"\nCentroid affinity accuracy: {acc*100:.2f}%")
+        if len(per_char_cos) > 0:
+            print("\nMean cosine to true centroid per character:")
+            print(per_char_cos.round(3))
+        if not confusion.empty:
+            print("\nConfusion matrix (row normalized):")
+            print(confusion.round(2))
+
+        # 2) Stylometric JSD
+        jsd_overall, df_jsd = stylometric_jsd(real_lines, gen_lines)
+        print(f"\nStylometric JSD (lower is better). Overall: {jsd_overall:.3f}")
+        print(df_jsd.round(3))
+
+        # Save the row for this model
+        summary_rows.append({
+            "centroid_affinity_acc": acc,
+            "jsd_overall": jsd_overall
+        })
+
+    # After loop, save final summary
     pd.DataFrame(summary_rows).to_csv("eval_summary.csv", index=False)
 
     print("\nSaved:")
-    print(" - generations.csv")
     print(" - eval_summary.csv")
 
 

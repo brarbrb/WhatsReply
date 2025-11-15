@@ -13,8 +13,6 @@ CREATE TABLE IF NOT EXISTS messages (
 
   sent_at           TEXT NOT NULL,   -- ISO 8601 timestamp
   text              TEXT NOT NULL,   -- cleaned text used for training and retrieval
-  raw_text          TEXT,            -- optional original text
-  meta_json         TEXT             -- optional JSON flags, e.g. {"very_short": true}
 );
 
 -- Helpful indexes
