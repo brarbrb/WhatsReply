@@ -18,7 +18,7 @@ def parse_episode_name(full_name):
 
 episodes = {}
 
-with open(r'C:/Users/User/Downloads/1_10_seasons_tbbt.csv', newline='', encoding='utf-8') as f:
+with open(r"./1_10_seasons_tbbt.csv", newline="", encoding="utf-8") as f:
     reader = csv.reader(f)
     current_scene = []
     current_episode = None
@@ -33,10 +33,7 @@ with open(r'C:/Users/User/Downloads/1_10_seasons_tbbt.csv', newline='', encoding
             continue
 
         if ep_key not in episodes:
-            episodes[ep_key] = {
-                "Episode Title": ep_title,
-                "Script": []
-            }
+            episodes[ep_key] = {"Episode Title": ep_title, "Script": []}
             current_episode = ep_key
             current_scene = []
 
@@ -46,10 +43,7 @@ with open(r'C:/Users/User/Downloads/1_10_seasons_tbbt.csv', newline='', encoding
                 current_scene = []
             continue
 
-        current_scene.append({
-            "Speaker": speaker.strip(),
-            "Text": dialogue.strip()
-        })
+        current_scene.append({"Speaker": speaker.strip(), "Text": dialogue.strip()})
 
     if current_scene and current_episode:
         episodes[current_episode]["Script"].append(current_scene)

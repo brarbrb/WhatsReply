@@ -1,10 +1,10 @@
 import json, re
 from collections import Counter
 
-INPUT = '/Users/ransela/Desktop/data_science_degree/4th_year/spring/Data Analysis and Visualization Lab/project/Whatsapp_webApp_-Django-/gens_orig_llama.jsonl'
-#OUTPUT = "/home/student/Whatsapp_webApp_-Django-/fine_tune_data/bbt_test_cleaned.jsonl"
-#gens_path = "/home/student/Whatsapp_webApp_-Django-/gens_cache_cleaned.jsonl"
-#OUTPUT = "/home/student/Whatsapp_webApp_-Django-/gens_cache_cleaned.jsonl"
+INPUT = "./gens_orig_llama.jsonl"
+# OUTPUT = "/home/student/Whatsapp_webApp_-Django-/fine_tune_data/bbt_test_cleaned.jsonl"
+# gens_path = "/home/student/Whatsapp_webApp_-Django-/gens_cache_cleaned.jsonl"
+# OUTPUT = "/home/student/Whatsapp_webApp_-Django-/gens_cache_cleaned.jsonl"
 
 SMALL_VALID_SPEAKERS = [
     "Sheldon",
@@ -13,7 +13,7 @@ SMALL_VALID_SPEAKERS = [
     "Howard",
     "Raj",
     "Amy",
-    "Bernadette"
+    "Bernadette",
 ]
 BIG_VALID_SPEAKERS = [
     "Sheldon",
@@ -61,19 +61,20 @@ ALIAS_MAP = {
     "howie": "Howard",
     "shelly": "Sheldon",
     "bernie": "Bernadette",
-    "rajish": "Raj",   # if appears in some transcripts
+    "rajish": "Raj",  # if appears in some transcripts
     "rajesh": "Raj",
 }
 
 VALID_LOWER = [c.lower() for c in SMALL_VALID_SPEAKERS]
+
 
 def normalize_speaker(s: str) -> str:
     if not s:
         return ""
     t = s.strip()
     t = re.sub(r"\s+", " ", t)
-    t = re.sub(r"[()\[\]{}]+", "", t)           # remove any brackets anywhere
-    t = re.sub(r"[:;,.!?]+$", "", t).strip()    # remove trailing punctuation
+    t = re.sub(r"[()\[\]{}]+", "", t)  # remove any brackets anywhere
+    t = re.sub(r"[:;,.!?]+$", "", t).strip()  # remove trailing punctuation
     low = t.lower()
 
     # 1) exact alias match
@@ -87,9 +88,11 @@ def normalize_speaker(s: str) -> str:
 
     return t
 
+
 def is_valid_exact(s: str) -> bool:
     # after normalization this should be an exact canonical name
     return s in SMALL_VALID_SPEAKERS
+
 
 rows = []
 with open(INPUT, "r", encoding="utf-8") as f:
@@ -108,7 +111,7 @@ with open(INPUT, "r", encoding="utf-8") as f:
 
 # split after normalization
 good = [r for r in rows if is_valid_exact(r.get("target_speaker", ""))]
-bad  = [r for r in rows if not is_valid_exact(r.get("target_speaker", ""))]
+bad = [r for r in rows if not is_valid_exact(r.get("target_speaker", ""))]
 
 print(f"Total rows: {len(rows)}")
 print(f" Valid rows: {len(good)}")

@@ -202,7 +202,7 @@ def main():
         torch.cuda.manual_seed_all(42)
 
     # Load test items
-    test_path = '/Users/ransela/Desktop/data_science_degree/4th_year/spring/Data Analysis and Visualization Lab/project/Whatsapp_webApp_-Django-/fine_tune_data/bbt_test_cleaned.jsonl'
+    test_path = "./fine_tune_data/bbt_test_cleaned.jsonl"
     raw = read_jsonl(test_path, max_samples=args.max_samples)
     # Normalize expected fields
     items = []
