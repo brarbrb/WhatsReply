@@ -1,25 +1,14 @@
 # --------------------------- Import libraries --------------------------------------------------
 import os
-
-from typing import List, Dict
-
-import re
 import pandas as pd
 from pandas import DataFrame
 import numpy as np
-
-import matplotlib.pyplot as plt
-
-from sklearn.metrics.pairwise import cosine_similarity
-from sklearn.decomposition import PCA
 
 import warnings
 
 warnings.filterwarnings("ignore")
 
 import cohere
-from transformers import AutoTokenizer, AutoModelForCausalLM
-import torch
 from sentence_transformers import SentenceTransformer
 from pinecone import Pinecone, ServerlessSpec
 
@@ -37,7 +26,7 @@ load_dotenv(override=True)
 PINECONE_API_KEY = os.environ.get("PINECONE_API_KEY", "")
 
 # Replace with your own Cohere API KEY
-COHERE_API_KEY = os.environ.get("COHERE_API_KEY", "")
+COHERE_API_KEY = os.environ.get("COHERE_API_KEY_PAY", "")
 
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 
@@ -136,29 +125,19 @@ def build_user_style(
     text_col: str = "text",
     random_sample: bool = True,
     seed: int | None = 42,
-) -> str:
+) -> tuple[list[str], str]:
     """
-    Return a string that represents the typical style of a given user,
-    built from k of their messages.
+    Return:
+      - list of example messages (lines)
+      - a single multi-line string user_style
 
-    Each line looks like:
-        <message>
-
-    Args:
-        df: DataFrame with at least ['sender_user_id', text_col].
-        user_id: The user whose style we want to capture.
-        k: Number of messages to use.
-        text_col: Column with the text of the message.
-        random_sample: If True sample k messages randomly, else take the last k.
-        seed: Random seed for reproducibility when random_sample is True.
-
-    Returns:
-        A single multi line string with example messages in the user's style.
+    If there are no messages for this user_id, returns ([], "").
     """
     user_df = df[df["sender_user_id"] == user_id].copy()
 
     if len(user_df) == 0:
-        return ""
+        # no style data, just return empty safely
+        return [], ""
 
     user_df = user_df.sort_values("sent_at")
 
@@ -210,31 +189,44 @@ def create_pinecone_index(
 
 ## **Upsert vectors to Pinecone index**
 def upsert_vectors(
-    index: Pinecone, dataset: DataFrame, embeddings: np.ndarray, batch_size: int = 128
+    index,               # Pinecone index object
+    dataset: DataFrame,
+    embeddings: np.ndarray,
+    batch_size: int = 128,
 ):
     """
-    Upsert vectors to a pinecone index
+    Upsert vectors to a Pinecone index.
+
     Args:
-        index: The pinecone index object
-        embeddings: The embeddings to upsert
-        dataset: The dataset containing the metadata
-        batch_size: The batch size to use for upserting
+        index: The pinecone index object (pc.Index(...)).
+        embeddings: The embeddings to upsert (shape [n_rows, dim]).
+        dataset: The dataset containing the metadata (same number of rows).
+        batch_size: The batch size to use for upserting.
+
     Returns:
-        An updated pinecone index
+        The same Pinecone index.
     """
     print("Upserting the embeddings to the Pinecone index...")
 
-    # Get all column names except 'embedding' for metadata
+    # Sanity check: dataset rows must match embeddings rows
+    if embeddings.shape[0] != len(dataset):
+        raise ValueError(
+            f"Embeddings rows ({embeddings.shape[0]}) != dataset rows ({len(dataset)}). "
+            "Make sure you're passing aligned slices of both."
+        )
+
+    # All metadata columns except the 'embedding' column itself
     metadata_fields = [col for col in dataset.columns if col != "embedding"]
 
     # Generate unique IDs for each row
-    ids = [str(i) for i in range(shape[0])]
+    num_rows = embeddings.shape[0]
+    ids = [str(i) for i in range(num_rows)]
 
     # Build metadata dict for each row
     meta = []
     for _, row in dataset.iterrows():
         entry = {col: row[col] for col in metadata_fields}
-        meta.append(entry)  # Extract full metadata
+        meta.append(entry)
 
     # Create list of (id, vector, metadata) tuples for upserting
     to_upsert = list(zip(ids, embeddings, meta))
@@ -314,45 +306,75 @@ def augment_prompt(
     return improved_prompt, answers
 
 
-def rag_pipleine(kb_knoloedge_path, query):
+def rag_pipleine(kb_knoloedge_path: str, query: str) -> str:
+    """
+    Full RAG pipeline:
+      - Load KB CSV
+      - Embed
+      - Create / connect to Pinecone index
+      - Upsert embeddings (for Barbara rows)
+      - Build context + user style
+      - Build augmented prompt
+      - Call Cohere
+      - Return reply text
 
+    NOTE: This function currently RE-embeds and RE-upserts the entire KB
+    every call. It's correct but expensive. For now we keep it simple.
+    """
     whatsapp_chats = pd.read_csv(kb_knoloedge_path)
 
+    # Embed all rows
     model_emb = SentenceTransformer(EMBEDDING_MODEL)
     kb_df_all, embeddings = load_and_embedd_dataset(whatsapp_chats, model_emb)
+
+    # Filter only rows where specific user is the receiver
     kb_df_to_barbara = kb_df_all[
-        kb_df_all["receiver_user_id"] == "u_barbara"
+        kb_df_all["receiver_user_id"] == "Barbara"
     ].sort_values(by="conv_turn")
+
+    # Align embeddings with the filtered DataFrame
+    # (assuming kb_df_all kept original index)
+    embeddings_to_barbara = embeddings[kb_df_to_barbara.index.to_list()]
+
+    # Create Pinecone index (dimension = embedding size, not 'shape')
     INDEX_NAME = "chats-index"
+    pc = create_pinecone_index(INDEX_NAME, embeddings_to_barbara.shape[1])
 
-    # Create the vector database
-    # We are passing the index_name and the size of our embeddings
-    pc = create_pinecone_index(INDEX_NAME, shape[1])
-
-    # Upsert the embeddings to the Pinecone index
+    # Upsert embeddings only for specific user rows
     index = pc.Index(INDEX_NAME)
-    index_upserted = upsert_vectors(index, kb_df_to_barbara, embeddings)
+    index_upserted = upsert_vectors(index, kb_df_to_barbara, embeddings_to_barbara)
 
-    # build context and user style strings
-    context = build_context(kb_df_all, conv_id="chat:u_barbara_u_maayan", k=10)
+    # Build context and user style from the whole KB
+    #    (you might want to parameterize conv_id later)
+    context = build_context(
+        kb_df_all,
+        conv_id="chat:u_1_u_2",  # <-- can be adjusted later
+        k=10,
+    )
+
     barbara_messages, user_style = build_user_style(
-        kb_df_all, user_id="u_barbara", k=10
+        kb_df_all,
+        user_id="Barbara",
+        k=10,
     )
 
-    query = (
-        "i need help with my students, did you taught them already the embeddings ppt?"
-    )
-
+    # query = "i need help with my students, did you taught them already the embeddings ppt?"
+    # Augment the prompt with retrieved context
     augmented_prompt, source_knowledge = augment_prompt(
-        query, user_style, context, model=model_emb, index=index
+        query=query,
+        user_style=user_style,
+        context=context,
+        model=model_emb,
+        index=index_upserted,
     )
+
+    #Cohere
     co = cohere.Client(api_key=COHERE_API_KEY)
     response = co.chat(
-        model="command-a-03-2025",
+        # model="command-a-03-2025",
+        model="command-r-08-2024",
         message=augmented_prompt,
     )
-    response.text
-
     return response.text
 
 

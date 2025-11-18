@@ -279,7 +279,6 @@ def chat_detail(request, chat_id):
     )
     # print("Last message in chat:", messages_list[-1] if messages_list else "no messages")
     suggestion_text = None
-    kb_path = "C:/Users/areg6/Documents/github/Whatsapp_webApp_-Django-/RAG/RAG_data/KB_data.csv"
 
     rag = apps.get_app_config("whatsapp").rag
     if rag:
