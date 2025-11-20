@@ -3,6 +3,9 @@
 This project is a Django-based web application that integrates machine learning pipelines for data preprocessing, fine-tuning models, and retrieval-augmented generation (RAG). It provides a platform for deploying AI-powered applications, potentially including chatbots, knowledge retrieval systems, and more.
 
 ![Alt text](Website(Django)/login.png)
+🎥 Demonstration of our tool: 
+[DEMO](https://drive.google.com/file/d/1t1sn073fCFUXyf07_Q2tA7RvrH61Qfek/view?usp=sharing)
+
 ---
 
 ## **Table of Contents**
@@ -19,8 +22,7 @@ This project is a Django-based web application that integrates machine learning 
 
 ## **Project Overview**
 
-Demonstration of our tool: 
-[DEMO](https://drive.google.com/file/d/1t1sn073fCFUXyf07_Q2tA7RvrH61Qfek/view?usp=sharing)
+
 
 This project combines:
 
