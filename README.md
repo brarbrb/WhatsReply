@@ -77,32 +77,21 @@ The project is composed of these components:
 
 ---
 
-## **Setup Instructions**
+## **Django Setup Instructions**
 
 ### **1. Create a Project Environment**
 
-Run the following commands in your terminal to set up a virtual environment and install Django:
+Run the following commands in your terminal in project folder to set up a virtual environment and install Django:
 
 ```bash
+cd path/to_forked_project
 python3 -m venv .venv
-source .venv/bin/activate # Ensure you're using the environment's Python
+source .venv/bin/activate # Ensure you're using the Python's enviroment
 python -m pip install --upgrade pip
 python -m pip install django
 ```
 
-### **2. Create the Django Project**
-
-Initialize the Django project:
-
-```bash
-django-admin startproject web_project . # Assumes the current folder is your project folder
-```
-
-Run the following command to create an empty development database:
-
-```bash
-python manage.py migrate
-```
+### **2. In Django Project**
 
 Start the Django development server:
 
@@ -116,12 +105,12 @@ To use a different port, specify it like this:
 python manage.py runserver 5000
 ```
 
-### **3. Create a Django App**
+### **3. Runing changes**
 
-Create a new Django app for the project:
-
+In case of modifications to our code, changing in db. Run this lines: 
 ```bash
-python manage.py startapp whatsapp
+python manage.py makemigrations
+python manage.py migrate
 ```
 
 ---
@@ -144,7 +133,7 @@ Here’s an overview of the project structure:
 WhatsReply/
 ├── data_preprocessing/       # Scripts for data cleaning and transformation
 ├── Fine_Tune/                # Fine-tuning machine learning models
-├── RAG/                      # Retrieval-Augmented Generation pipeline
+├── RAG/                      # Retrieval-Augmented Generation pipeline (We also aded small destilation technique as asmall experiment)
 ├── Website(Django)/          # Django-based web application
 ├── .env                      # Environment variables
 ├── requirements.txt          # Python dependencies
@@ -160,5 +149,4 @@ Install the required dependencies using the following command:
 ```bash
 pip install -r requirements.txt
 ```
-
 ---
