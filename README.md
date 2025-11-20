@@ -141,7 +141,7 @@ python manage.py startapp whatsapp
 Here’s an overview of the project structure:
 
 ```
-Whatsapp_webApp_-Django-/
+WhatsReply/
 ├── data_preprocessing/       # Scripts for data cleaning and transformation
 ├── Fine_Tune/                # Fine-tuning machine learning models
 ├── RAG/                      # Retrieval-Augmented Generation pipeline
