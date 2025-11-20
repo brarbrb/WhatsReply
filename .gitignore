@@ -204,3 +204,4 @@ __pycache__
 .wwebjs_cache
 .env
 distilled
+.DS_Store
