@@ -357,6 +357,7 @@ def main():
         )
         print(f"\nCentroid affinity accuracy: {acc*100:.2f}%")
         if len(per_char_cos) > 0:
+            
             print("\nMean cosine to true centroid per character:")
             print(per_char_cos.round(3))
         if not confusion.empty:
